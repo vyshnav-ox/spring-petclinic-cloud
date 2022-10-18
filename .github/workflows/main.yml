@@ -43,7 +43,7 @@ jobs:
         docker tag $REGISTRY/spring-petclinic-cloud-visits-service $REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG
         docker tag $REGISTRY/spring-petclinic-cloud-vets-service $REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG
         docker tag $REGISTRY/spring-petclinic-cloud-customers-service $REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG
-        docker tag $REGISTRY/spring-petclinic-api-gateway $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
+        docker tag $REGISTRY/spring-petclinic-cloud-api-gateway $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       env:
