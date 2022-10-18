@@ -23,8 +23,8 @@ jobs:
         java-version: '11'
         distribution: 'adopt'
         cache: maven
-    - name: Build with Maven
-      run: mvn test
+    # - name: Build with Maven
+    #   run: mvn test
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -43,195 +43,209 @@ jobs:
         docker tag $REGISTRY/spring-petclinic-cloud-visits-service $REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG
         docker tag $REGISTRY/spring-petclinic-cloud-vets-service $REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG
         docker tag $REGISTRY/spring-petclinic-cloud-customers-service $REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG
-        docker tag $REGISTRY/spring-petclinic-cloud-admin-server $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
-    - name: Run docker vulnerability scanner
-      uses: anchore/scan-action@v3
-      id: scan-visit-service
-      env:
-        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }} 
-      with:
-         image: '$REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG'
-         fail-build: false
-         severity-cutoff: critical
-    - name: upload Anchore scan SARIF report - visits-service
-      uses: actions/upload-artifact@v3
-      with:
-        name: scan-visit-service
-        path: ./results.sarif
-    - name: Run docker vulnerability scanner
-      uses: anchore/scan-action@v3
-      id: scan-vets-service
-      env:
-        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }} 
-      with:
-         image: '$REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG'
-         fail-build: false
-         severity-cutoff: critical  
-    - name: upload Anchore scan SARIF report - vets-service
-      uses: actions/upload-artifact@v3
-      with:
-        name: scan-vets-service
-        path: ./results.sarif
-    - name: Run docker vulnerability scanner
-      uses: anchore/scan-action@v3
-      id: scan-customer-service
-      env:
-        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }} 
-      with:
-         image: '$REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG'
-         fail-build: false
-         severity-cutoff: critical
-    - name: upload Anchore scan SARIF report - customer-service
-      uses: actions/upload-artifact@v3
-      with:
-        name: scan-customer-service
-        path: ./results.sarif
-
-    - name: Run docker vulnerability scanner
-      uses: anchore/scan-action@v3
-      id: scan-api-service
-      env:
-        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ github.sha }} 
-      with:
-         image: '$REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG'
-         fail-build: false
-         severity-cutoff: critical 
-    - name: upload Anchore scan SARIF report - api-gateway
-      uses: actions/upload-artifact@v3
-      with:
-        name: scan-api-gateway
-        path: ./results.sarif  
-
-    - name: Push Image to ECR. #pushing image to ECR
+        docker tag $REGISTRY/spring-petclinic-api-gateway $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
       env:
         REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
-      run: |
-        docker push -a $REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG
-        docker push -a $REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG
-        docker push -a $REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG
-        docker push -a $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
-  CD:
-    needs: [CI]
-    name: CD
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Install git. #installing git
-      run: sudo apt-get install git
-    - name: Set git config # Set global git configuration.
-      run: |
-          git config --global credential.helper cache
-          git config --global user.email ${GIT_USER_EMAIL}
-          git config --global user.name ${GIT_USER_NAME} 
-    - name: Checkout GitOps repository and update image tag # Checkout the GitOps repository and updating the image tag
-      run: |
-        git clone -b feature/github-actions https://${GIT_USER_NAME}:${GIT_TOKEN}@github.com/vyshnav-ox/spring-petclinic-cloud-k8s-config.git
-        cd spring-petclinic-cloud-k8s-config/
-        sed -i 's/\/spring-petclinic-cloud-api-gateway:.*/\/spring-petclinic-cloud-api-gateway:${{ github.sha }}/' api-gateway-deployment.yaml
-        sed -i 's/\/spring-petclinic-cloud-customers-service:.*/\/spring-petclinic-cloud-customers-service:${{ github.sha }}/' customers-service-deployment.yaml
-        sed -i 's/\/spring-petclinic-cloud-vets-service:.*/\/spring-petclinic-cloud-vets-service:${{ github.sha }}/' vets-service-deployment.yaml
-        sed -i 's/\/spring-petclinic-cloud-visits-service:.*/\/spring-petclinic-cloud-visits-service:${{ github.sha }}/' visits-service-deployment.yaml
-        git add .
-        git commit -m "updated image tag to ${{ github.sha }} "
-        git push origin feature/github-actions
+      with:
+          image-ref: $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
+          format: 'sarif'
+          output: 'trivy-results.sarif'
 
-  Security-Test:
-    needs: [CD]
-    name: Security-Scan
-    runs-on: ubuntu-20.04
-    steps:
-    - name: code checkout
-      uses: actions/checkout@v2
-    - name: Run JMeter Action on a test
-      uses: rbhadti94/apache-jmeter-action@v0.5.0
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
       with:
-          testFilePath: jmeter.jmx
-          outputReportsFolder: output/
-          args: "--loglevel INFO"
+          sarif_file: 'trivy-results.sarif'    
+    # - name: Run docker vulnerability scanner
+    #   uses: anchore/scan-action@v3
+    #   id: scan-visit-service
+    #   env:
+    #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    #     IMAGE_TAG: ${{ github.sha }} 
+    #   with:
+    #      image: '$REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG'
+    #      fail-build: false
+    #      severity-cutoff: critical
+    # - name: upload Anchore scan SARIF report - visits-service
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: scan-visit-service
+    #     path: ./results.sarif
+    # - name: Run docker vulnerability scanner
+    #   uses: anchore/scan-action@v3
+    #   id: scan-vets-service
+    #   env:
+    #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    #     IMAGE_TAG: ${{ github.sha }} 
+    #   with:
+    #      image: '$REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG'
+    #      fail-build: false
+    #      severity-cutoff: critical  
+    # - name: upload Anchore scan SARIF report - vets-service
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: scan-vets-service
+    #     path: ./results.sarif
+    # - name: Run docker vulnerability scanner
+    #   uses: anchore/scan-action@v3
+    #   id: scan-customer-service
+    #   env:
+    #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    #     IMAGE_TAG: ${{ github.sha }} 
+    #   with:
+    #      image: '$REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG'
+    #      fail-build: false
+    #      severity-cutoff: critical
+    # - name: upload Anchore scan SARIF report - customer-service
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: scan-customer-service
+    #     path: ./results.sarif
+
+    # - name: Run docker vulnerability scanner
+    #   uses: anchore/scan-action@v3
+    #   id: scan-api-service
+    #   env:
+    #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    #     IMAGE_TAG: ${{ github.sha }} 
+    #   with:
+    #      image: '$REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG'
+    #      fail-build: false
+    #      severity-cutoff: critical 
+    # - name: upload Anchore scan SARIF report - api-gateway
+    #   uses: actions/upload-artifact@v3
+    #   with:
+    #     name: scan-api-gateway
+    #     path: ./results.sarif  
+
+    # - name: Push Image to ECR. #pushing image to ECR
+    #   env:
+    #     REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+    #     IMAGE_TAG: ${{ github.sha }}
+    #   run: |
+    #     docker push $REGISTRY/spring-petclinic-cloud-visits-service:$IMAGE_TAG
+    #     docker push $REGISTRY/spring-petclinic-cloud-vets-service:$IMAGE_TAG
+    #     docker push $REGISTRY/spring-petclinic-cloud-customers-service:$IMAGE_TAG
+    #     docker push $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
+  # CD:
+  #   needs: [CI]
+  #   name: CD
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - name: Install git. #installing git
+  #     run: sudo apt-get install git
+  #   - name: Set git config # Set global git configuration.
+  #     run: |
+  #         git config --global credential.helper cache
+  #         git config --global user.email ${GIT_USER_EMAIL}
+  #         git config --global user.name ${GIT_USER_NAME} 
+  #   - name: Checkout GitOps repository and update image tag # Checkout the GitOps repository and updating the image tag
+  #     run: |
+  #       git clone -b feature/github-actions https://${GIT_USER_NAME}:${GIT_TOKEN}@github.com/vyshnav-ox/spring-petclinic-cloud-k8s-config.git
+  #       cd spring-petclinic-cloud-k8s-config/
+  #       sed -i 's/\/spring-petclinic-cloud-api-gateway:.*/\/spring-petclinic-cloud-api-gateway:${{ github.sha }}/' api-gateway-deployment.yaml
+  #       sed -i 's/\/spring-petclinic-cloud-customers-service:.*/\/spring-petclinic-cloud-customers-service:${{ github.sha }}/' customers-service-deployment.yaml
+  #       sed -i 's/\/spring-petclinic-cloud-vets-service:.*/\/spring-petclinic-cloud-vets-service:${{ github.sha }}/' vets-service-deployment.yaml
+  #       sed -i 's/\/spring-petclinic-cloud-visits-service:.*/\/spring-petclinic-cloud-visits-service:${{ github.sha }}/' visits-service-deployment.yaml
+  #       git add .
+  #       git commit -m "updated image tag to ${{ github.sha }} "
+  #       git push origin feature/github-actions
+
+  # Security-Test:
+  #   needs: [CD]
+  #   name: Security-Scan
+  #   runs-on: ubuntu-20.04
+  #   steps:
+  #   - name: code checkout
+  #     uses: actions/checkout@v2
+  #   - name: Run JMeter Action on a test
+  #     uses: rbhadti94/apache-jmeter-action@v0.5.0
+  #     with:
+  #         testFilePath: jmeter.jmx
+  #         outputReportsFolder: output/
+  #         args: "--loglevel INFO"
           
-    - name: PerfAction for JMeter
-      uses: QAInsights/PerfAction@v3.1
-      with:
-    # jmeter test plan to execute
-         test-plan-path: jmeter.jmx
+  #   - name: PerfAction for JMeter
+  #     uses: QAInsights/PerfAction@v3.1
+  #     with:
+  #   # jmeter test plan to execute
+  #        test-plan-path: jmeter.jmx
           
-    - uses: actions/upload-artifact@v1
-      with:
-         name: jmeter-test-results
-         path: output/
+  #   - uses: actions/upload-artifact@v1
+  #     with:
+  #        name: jmeter-test-results
+  #        path: output/
          
-    - name: Upload Results
-      uses: actions/upload-artifact@v2
-      with:
-         name: jmeter-results-jtl
-         path: result.jtl 
+  #   - name: Upload Results
+  #     uses: actions/upload-artifact@v2
+  #     with:
+  #        name: jmeter-results-jtl
+  #        path: result.jtl 
 
-    - name: ZAP Baseline Scan
-      uses: zaproxy/action-baseline@v0.7.0  # Marketplace actions
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}  #  When you use the repository's GITHUB_TOKEN to perform tasks, events triggered by the GITHUB_TOKEN will not create a new workflow run.
-        docker_name: 'owasp/zap2docker-stable'  # The name of the docker file to be executed. By default the action runs the stable version of ZAP. 
-        target: 'https://cloudifyops.com/'
-        fail_action: false
+  #   - name: ZAP Baseline Scan
+  #     uses: zaproxy/action-baseline@v0.7.0  # Marketplace actions
+  #     with:
+  #       token: ${{ secrets.GITHUB_TOKEN }}  #  When you use the repository's GITHUB_TOKEN to perform tasks, events triggered by the GITHUB_TOKEN will not create a new workflow run.
+  #       docker_name: 'owasp/zap2docker-stable'  # The name of the docker file to be executed. By default the action runs the stable version of ZAP. 
+  #       target: 'https://cloudifyops.com/'
+  #       fail_action: false
   
-    - name: Audit URLs using Lighthouse
-      uses: treosh/lighthouse-ci-action@v9
-      with:
-         urls: |
-            https://cloudifyops.com/
-         budgetPath: ./budget.json # test performance budgets
-         uploadArtifacts: true # save results as an action artifacts
-         temporaryPublicStorage: true    
-    - name: Slack Notification
-      uses: act10ns/slack@v1
-      with: 
-        status: ${{ job.status }}
-        steps: ${{ toJson(steps) }}
-        channel: '#general'
-        config: .github/config/slack.yaml
-        message: jmeter execution Finished...
-      if: always()
+  #   - name: Audit URLs using Lighthouse
+  #     uses: treosh/lighthouse-ci-action@v9
+  #     with:
+  #        urls: |
+  #           https://cloudifyops.com/
+  #        budgetPath: ./budget.json # test performance budgets
+  #        uploadArtifacts: true # save results as an action artifacts
+  #        temporaryPublicStorage: true    
+  #   - name: Slack Notification
+  #     uses: act10ns/slack@v1
+  #     with: 
+  #       status: ${{ job.status }}
+  #       steps: ${{ toJson(steps) }}
+  #       channel: '#general'
+  #       config: .github/config/slack.yaml
+  #       message: jmeter execution Finished...
+  #     if: always()
 
-    - name: Send mail
-      uses: dawidd6/action-send-mail@v3
-      with:
-          # Required mail server address:
-          server_address: smtp.gmail.com
-          # Required mail server port:
-          server_port: 465
-          # Optional (recommended): mail server username:
-          username: ${{secrets.MAIL_USERNAME}}
-          # Optional (recommended) mail server password:
-          password: ${{secrets.MAIL_PASSWORD}}
-          # Required mail subject:
-          subject: Github Actions job result
-          # Required recipients' addresses:
-          to: vyshnav.vm@cloudifyops.com
-          # Required sender full name (address can be skipped):
-          from: vyshnav.ox@gmail.com # <user@example.com>
-          # Optional whether this connection use TLS (default is true if server_port is 465)
-          secure: true
-          # Optional plain body:
-          body: Build zap job completed successfully!
-          # Optional HTML body read from file:
-          # html_body: file://README.html
-          # Optional carbon copy recipients:
-          # cc: kyloren@example.com,leia@example.com
-          # Optional blind carbon copy recipients:
-          # bcc: r2d2@example.com,hansolo@example.com
-          # Optional recipient of the email response:
-          # reply_to: luke@example.com
-          # Optional Message ID this message is replying to:
-          # in_reply_to: <random-luke@example.com>
-          # Optional unsigned/invalid certificates allowance:
-          ignore_cert: true
-          # Optional converting Markdown to HTML (set content_type to text/html too):
-          convert_markdown: true
-          # Optional attachments:
-          attachments: report_html.html
-          # Optional priority: 'high', 'normal' (default) or 'low'
-          priority: low
+  #   - name: Send mail
+  #     uses: dawidd6/action-send-mail@v3
+  #     with:
+  #         # Required mail server address:
+  #         server_address: smtp.gmail.com
+  #         # Required mail server port:
+  #         server_port: 465
+  #         # Optional (recommended): mail server username:
+  #         username: ${{secrets.MAIL_USERNAME}}
+  #         # Optional (recommended) mail server password:
+  #         password: ${{secrets.MAIL_PASSWORD}}
+  #         # Required mail subject:
+  #         subject: Github Actions job result
+  #         # Required recipients' addresses:
+  #         to: vyshnav.vm@cloudifyops.com
+  #         # Required sender full name (address can be skipped):
+  #         from: clops.jenkins@gmail.com # <user@example.com>
+  #         # Optional whether this connection use TLS (default is true if server_port is 465)
+  #         secure: true
+  #         # Optional plain body:
+  #         body: Build zap job completed successfully!
+  #         # Optional HTML body read from file:
+  #         # html_body: file://README.html
+  #         # Optional carbon copy recipients:
+  #         # cc: kyloren@example.com,leia@example.com
+  #         # Optional blind carbon copy recipients:
+  #         # bcc: r2d2@example.com,hansolo@example.com
+  #         # Optional recipient of the email response:
+  #         # reply_to: luke@example.com
+  #         # Optional Message ID this message is replying to:
+  #         # in_reply_to: <random-luke@example.com>
+  #         # Optional unsigned/invalid certificates allowance:
+  #         ignore_cert: true
+  #         # Optional converting Markdown to HTML (set content_type to text/html too):
+  #         convert_markdown: true
+  #         # Optional attachments:
+  #         attachments: report_html.html
+  #         # Optional priority: 'high', 'normal' (default) or 'low'
+  #         priority: low
