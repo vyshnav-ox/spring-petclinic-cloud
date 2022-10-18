@@ -23,8 +23,14 @@ jobs:
         java-version: '11'
         distribution: 'adopt'
         cache: maven
-    # - name: Build with Maven
-    #   run: mvn test
+    - name: Build with Maven
+      run: | 
+        mvn clean test
+        mvn surefire-report:report-only
+        cp spring-petclinic-api-gateway/target/site/surefire-report.html ./api-gateway-unit-test.html
+        cp spring-petclinic-vets-service/target/site/surefire-report.html ./vets-service-unit-test.html
+        cp spring-petclinic-visits-service/target/site/surefire-report.html ./visits-service-unit-test.html
+        cp spring-petclinic-customer-service/target/site/surefire-report.html ./customer-service-unit-test.html 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -50,9 +56,11 @@ jobs:
         REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       with:
-          image-ref: $REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG
+          image-ref: '$REGISTRY/spring-petclinic-cloud-api-gateway:$IMAGE_TAG'
           format: 'sarif'
           output: 'trivy-results.sarif'
+          exit-code: '0'
+
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v2
