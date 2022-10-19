@@ -27,10 +27,7 @@ jobs:
       run: | 
         mvn clean test
         mvn surefire-report:report-only
-        cp spring-petclinic-api-gateway/target/site/surefire-report.html ./api-gateway-unit-test.html
-        cp spring-petclinic-vets-service/target/site/surefire-report.html ./vets-service-unit-test.html
-        cp spring-petclinic-visits-service/target/site/surefire-report.html ./visits-service-unit-test.html
-        cp spring-petclinic-customer-service/target/site/surefire-report.html ./customer-service-unit-test.html 
+        ls -lart 
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
